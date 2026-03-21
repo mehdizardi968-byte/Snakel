@@ -278,6 +278,7 @@ io.on('connection', (socket) => {
         const player = gameState.players.get(socket.id);
         
         if (player) {
+            player.lastActive = currentTime;
             const updateInterval = Math.max(50, 200 - player.currentLength * 5);
             
             if (!player.lastMoveTime || currentTime - player.lastMoveTime > updateInterval) {
@@ -318,7 +319,7 @@ io.on('connection', (socket) => {
             const lengthGain = 1;
             player.currentLength += lengthGain;
             player.segmentsToAdd = (player.segmentsToAdd || 0) + lengthGain;
-            player.speed = Math.max(1, 5 - (player.currentLength / 10));
+            player.speed = Math.max(3, 5 - (player.currentLength / 30));
             
             socket.emit('foodCollected', { success: true, foodId: collectedFood.id });
             
@@ -341,7 +342,7 @@ io.on('connection', (socket) => {
     });
 
     function updatePlayerSnakeBody(playerId, newHeadPosition) {
-        const snakeBuffer = playerSnakes.get(playerId);
+        let snakeBuffer = playerSnakes.get(playerId);
         const player = gameState.players.get(playerId);
         
         if (!snakeBuffer || !player) {
@@ -349,27 +350,25 @@ io.on('connection', (socket) => {
             return;
         }
         
-        if (!Array.isArray(snakeBuffer)) {
-            playerSnakes.set(playerId, new Array(MAX_SNAKE_LENGTH).fill(null));
-            playerSnakeHeads.set(playerId, -1);
-            return;
+        if (!Array.isArray(snakeBuffer) || snakeBuffer.length < MAX_SNAKE_LENGTH) {
+            const newBuffer = new Array(MAX_SNAKE_LENGTH).fill(null);
+            if (Array.isArray(snakeBuffer)) {
+                for (let i = 0; i < snakeBuffer.length; i++) {
+                    newBuffer[i] = snakeBuffer[i];
+                }
+            }
+            playerSnakes.set(playerId, newBuffer);
+            snakeBuffer = newBuffer;
         }
         
         let headIndex = playerSnakeHeads.get(playerId);
+        if (headIndex === undefined || headIndex === null) headIndex = -1;
         const newHeadIndex = (headIndex + 1) % MAX_SNAKE_LENGTH;
         snakeBuffer[newHeadIndex] = newHeadPosition;
         playerSnakeHeads.set(playerId, newHeadIndex);
         
-        let occupiedSlots = 0;
-        for (let i = 0; i < MAX_SNAKE_LENGTH; i++) {
-            if (snakeBuffer[i] !== null) {
-                occupiedSlots++;
-            }
-        }
-        if (occupiedSlots > player.currentLength) {
-            const tailIndexToClear = (newHeadIndex - player.currentLength + MAX_SNAKE_LENGTH) % MAX_SNAKE_LENGTH;
-            snakeBuffer[tailIndexToClear] = null;
-        }
+        const tailIndexToClear = (newHeadIndex - player.currentLength + MAX_SNAKE_LENGTH) % MAX_SNAKE_LENGTH;
+        snakeBuffer[tailIndexToClear] = null;
     }
     socket.on('chat message', (data) => {
         console.log('Server: Received chat message:', data, 'from:', socket.id);
